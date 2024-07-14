@@ -1,29 +1,24 @@
 package org.example.model;
 
+import org.example.annotation.NomeAlternativo;
+
 import java.math.BigDecimal;
 import java.util.Date;
 
 public class Teste {
 
-    private String nome;
-    private Date dataNacimento;
+    @NomeAlternativo({"nome_completo", "nome", "nome_sobrenome"})
+    private String nomeCompleto;
     private BigDecimal salario;
-    private String nomeSobrenomeMae;
+    @NomeAlternativo("data_nacimento")
+    private Date dataNascimento;
 
-    public String getNome() {
-        return nome;
+    public String getNomeCompleto() {
+        return nomeCompleto;
     }
 
-    public void setNome(String nome) {
-        this.nome = nome;
-    }
-
-    public Date getDataNacimento() {
-        return dataNacimento;
-    }
-
-    public void setDataNacimento(Date dataNacimento) {
-        this.dataNacimento = dataNacimento;
+    public void setNomeCompleto(String nomeCompleto) {
+        this.nomeCompleto = nomeCompleto;
     }
 
     public BigDecimal getSalario() {
@@ -34,11 +29,11 @@ public class Teste {
         this.salario = salario;
     }
 
-    public String getNomeSobrenomeMae() {
-        return nomeSobrenomeMae;
+    public Date getDataNascimento() {
+        return dataNascimento;
     }
 
-    public void setNomeSobrenomeMae(String nomeSobrenomeMae) {
-        this.nomeSobrenomeMae = nomeSobrenomeMae;
+    public void setDataNascimento(Date dataNascimento) {
+        this.dataNascimento = dataNascimento;
     }
 }
