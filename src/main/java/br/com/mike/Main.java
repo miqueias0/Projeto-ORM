@@ -1,7 +1,7 @@
-package org.example;
+package br.com.mike;
 
-import org.example.mapper.TesteMapper;
-import org.example.model.Teste;
+import br.com.mike.mapper.TesteMapper;
+import br.com.mike.model.Teste;
 
 public class Main {
 

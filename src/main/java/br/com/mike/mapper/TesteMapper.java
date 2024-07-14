@@ -1,7 +1,7 @@
-package org.example.mapper;
+package br.com.mike.mapper;
 
-import br.com.ns2e.comum.bd.Comando;
-import org.example.annotation.NomeAlternativo;
+import br.com.mike.annotation.Coluna;
+import br.com.mike.comum.StringOperations;
 
 import java.lang.reflect.Field;
 import java.sql.ResultSet;
@@ -46,21 +46,21 @@ public class TesteMapper {
     }
 
     private static List<String> montarListaNames(Field field) {
+        Coluna coluna = field.getAnnotation(Coluna.class);
+        if (coluna != null) {
+            return Collections.singletonList(coluna.nome());
+        }
         List<String> variablesNames = new ArrayList<>();
         variablesNames.add(field.getName());
-        variablesNames.add(join(field.getName()));
-        NomeAlternativo nomeAlternativo = field.getAnnotation(NomeAlternativo.class);
-        if (nomeAlternativo != null) {
-            variablesNames.addAll(Arrays.stream(nomeAlternativo.value()).toList());
-        }
+        variablesNames.add(StringOperations.join(field.getName()));
         return variablesNames;
     }
 
     private static Object setValue(Class<?> classe, ResultSet resultSet, List<String> variablesName) throws Exception {
         for (String variableName : variablesName) {
-            if (!Comando.existeColuna(resultSet, variableName)) {
-                continue;
-            }
+//            if (!Comando.existeColuna(resultSet, variableName)) {
+//                continue;
+//            }
             return cast(resultSet.getObject(variableName), classe);
         }
         return null;
@@ -108,15 +108,5 @@ public class TesteMapper {
         return classe.isInstance(object);
     }
 
-    private static String join(String value) {
-        return join(value.toCharArray(), 0, "");
-    }
 
-    private static String join(char[] caracters, Integer position, String value) {
-        value += (String.valueOf(caracters[position]).matches("^[A-Z]+$") ? "_" : "") + String.valueOf(caracters[position]).toLowerCase();
-        if ((caracters.length - 1) > position) {
-            return join(caracters, ++position, value);
-        }
-        return value;
-    }
 }

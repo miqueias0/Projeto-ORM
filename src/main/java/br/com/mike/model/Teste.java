@@ -1,16 +1,19 @@
-package org.example.model;
+package br.com.mike.model;
 
-import org.example.annotation.NomeAlternativo;
+import br.com.mike.annotation.Coluna;
+import br.com.mike.annotation.Tabela;
 
 import java.math.BigDecimal;
 import java.util.Date;
 
+@Tabela("modelo.teste")
 public class Teste {
 
-    @NomeAlternativo({"nome_completo", "nome", "nome_sobrenome"})
+    @Coluna(nome = "nome_completo")
     private String nomeCompleto;
+    @Coluna(nome = "salario")
     private BigDecimal salario;
-    @NomeAlternativo("data_nacimento")
+    @Coluna(nome = "data_nascimento")
     private Date dataNascimento;
 
     public String getNomeCompleto() {

@@ -1,4 +1,4 @@
-package org.example.model;
+package br.com.mike.model;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
