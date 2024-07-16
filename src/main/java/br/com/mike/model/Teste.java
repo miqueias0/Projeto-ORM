@@ -1,7 +1,9 @@
 package br.com.mike.model;
 
 import br.com.mike.annotation.Coluna;
+import br.com.mike.annotation.ManyToOne;
 import br.com.mike.annotation.Tabela;
+import br.com.mike.annotation.JoinColumn;
 
 import java.math.BigDecimal;
 import java.util.Date;
@@ -15,6 +17,8 @@ public class Teste {
     private BigDecimal salario;
     @Coluna(nome = "data_nascimento")
     private Date dataNascimento;
+    @ManyToOne
+    private Object value;
 
     public String getNomeCompleto() {
         return nomeCompleto;
