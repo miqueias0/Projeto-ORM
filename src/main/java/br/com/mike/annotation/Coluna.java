@@ -8,7 +8,7 @@ import java.lang.annotation.*;
 public @interface Coluna {
 
     String nome();
-
+    Class<?> typeBD() default Object.class;
     boolean unica() default false;
 
     boolean alteravel() default true;

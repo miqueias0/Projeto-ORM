@@ -4,16 +4,29 @@ import br.com.mike.annotation.Coluna;
 import br.com.mike.annotation.ManyToOne;
 import br.com.mike.annotation.Tabela;
 import br.com.mike.annotation.JoinColumn;
+import br.com.mike.comum.SQLObjectType;
 import br.com.mike.comum.StringOperations;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 
 public class CRUDManager<T> {
 
-    private StringBuilder createSQLComandInsert(T value) throws Exception {
+    private final Connection connection;
+    private PreparedStatement statement;
+
+    public CRUDManager(Connection connection) {
+        this.connection = connection;
+    }
+
+    private StringBuilder createSQLComandInsert(T value) throws SQLException {
         StringBuilder textSQL = new StringBuilder();
         textSQL.append("INSERT INTO ").append(tableName(value.getClass()));
         textSQL.append(" (").append(columnsName(value.getClass(), true));
@@ -21,28 +34,28 @@ public class CRUDManager<T> {
         return textSQL;
     }
 
-    private StringBuilder createSQLComandUpdate(T value) throws SQLException {
+    private StringBuilder createSQLComandUpdate(T value) throws SQLException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, NoSuchMethodException {
         StringBuilder textSQL = new StringBuilder();
         textSQL.append("UPDATE ").append(tableName(value.getClass())).append(" SET ");
         textSQL.append(updateColumnsName(value));
-        textSQL.append(createWhere(value.getClass()));
+        textSQL.append(createWhere(value.getClass(), " WHERE "));
         return textSQL;
     }
 
     private StringBuilder createSQLComandDelete(T value) throws SQLException {
         StringBuilder textSQL = new StringBuilder();
         textSQL.append("DELETE FROM ").append(tableName(value.getClass()));
-        textSQL.append(createWhere(value.getClass()));
+        textSQL.append(createWhere(value.getClass(), " WHERE "));
         return textSQL;
     }
 
-    public int save(T value) throws SQLException, IllegalAccessException {
-        switch (((ObjetoNegocio) value).getSituacao()){
-            case Novo:
+    public int save(T value, String situacao) throws SQLException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, NoSuchMethodException {
+        switch (situacao) {
+            case "insert":
                 return insert(value);
-            case Modificado:
+            case "update":
                 return update(value);
-            case Excluido:
+            case "delete":
                 return delete(value);
         }
         return 0;
@@ -53,8 +66,8 @@ public class CRUDManager<T> {
         return percorrerObjetoInsert(value, textoSQL).executeUpdate();
     }
 
-    private PreparedStatement percorrerObjetoInsert(T value, StringBuilder textoSQL)throws SQLException, IllegalAccessException{
-        statement = comando.prepareStatement(textoSQL.toString());
+    private PreparedStatement percorrerObjetoInsert(T value, StringBuilder textoSQL) throws SQLException, IllegalAccessException {
+        statement = connection.prepareStatement(textoSQL.toString());
         int cont = 0;
         percorrerObjetoInsert(value, value.getClass(), false, cont);
         return statement;
@@ -62,91 +75,102 @@ public class CRUDManager<T> {
 
     private int percorrerObjetoInsert(T value, Class<?> clazz, boolean isTabelaExterna, int cont) throws SQLException, IllegalAccessException {
         Field[] fields = clazz.getDeclaredFields();
-        for(Field field: fields){
-            if(isTabelaExterna){
-                if(field.isAnnotationPresent(Coluna.class)){
+        for (Field field : fields) {
+            if (isTabelaExterna) {
+                if (field.isAnnotationPresent(Coluna.class)) {
                     Coluna coluna = field.getAnnotation(Coluna.class);
-                    if(!coluna.chavePrimaria()){
+                    if (!coluna.chavePrimaria()) {
                         continue;
                     }
                 }
-                if(field.isAnnotationPresent(ManyToOne.class)){
+                if (field.isAnnotationPresent(ManyToOne.class)) {
                     continue;
                 }
             }
             field.setAccessible(true);
-            if(field.isAnnotationPresent(ManyToOne.class) && !isTabelaExterna){
+            if (field.isAnnotationPresent(ManyToOne.class) && !isTabelaExterna) {
                 cont = percorrerObjetoInsert((T) field.get(value), field.getType(), true, cont);
                 field.setAccessible(false);
                 continue;
             }
-            if(field.isAnnotationPresent(Coluna.class)){
+            if (field.isAnnotationPresent(Coluna.class)) {
                 Coluna coluna = field.getAnnotation(Coluna.class);
-                if(!coluna.inserivel()){
+                if (!coluna.inserivel()) {
                     field.setAccessible(false);
                     continue;
                 }
-                if(isTabelaExterna){
-                    if(!coluna.chavePrimaria()){
+                if (isTabelaExterna) {
+                    if (!coluna.chavePrimaria()) {
                         field.setAccessible(false);
                         continue;
                     }
-                    comando.tipoComando(field.get(value), statement, ++cont);
+
+                    CreateStatementObjectValue.TypeValue(field.get(value), statement, ++cont, connection);
                     field.setAccessible(false);
                     continue;
                 }
-                comando.tipoComando(field.get(value), statement, ++cont);
+                CreateStatementObjectValue.TypeValue(field.get(value), statement, ++cont, connection);
                 field.setAccessible(false);
                 continue;
             }
-            comando.tipoComando(field.get(value), statement, ++cont);
-            field.setAccessible(false);
         }
         return cont;
     }
 
-    private int update(T value) throws SQLException, IllegalAccessException {
+    private int update(T value) throws SQLException, IllegalAccessException, NoSuchMethodException, InvocationTargetException, NoSuchMethodException {
         StringBuilder textoSQL = createSQLComandUpdate(value);
         return percorrerObjetoUpdate(value, textoSQL).executeUpdate();
     }
 
-    private PreparedStatement percorrerObjetoUpdate(T value, StringBuilder textoSQL)throws SQLException, IllegalAccessException{
-        PreparedStatement statement = comando.prepareStatement(textoSQL.toString());
-        int cont = 0;
-        percorrerObjetoUpdate(value, value.getClass(), false, statement, cont);
-        preencherWhere(value, statement, cont);
+    private PreparedStatement percorrerObjetoUpdate(T value, StringBuilder textoSQL) throws SQLException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
+        PreparedStatement statement = connection.prepareStatement(textoSQL.toString());
+        int cont = percorrerObjetoUpdate(value, value.getClass(), false, statement, 0);
+        preencherWhere(value, value.getClass().getDeclaredFields(), statement, false, cont);
         return statement;
     }
 
-    private void percorrerObjetoUpdate(T value, Class<?> clazz, boolean isTabelaExterna, PreparedStatement statement, int cont) throws SQLException, IllegalAccessException {
-        for(Field field: clazz.getDeclaredFields()){
-            if(field.isAnnotationPresent(ManyToOne.class)){
-                cont = percorrerObjetoInsert(value, field.getType(), true, cont);
+    private int percorrerObjetoUpdate(T value, Class<?> clazz, boolean isTabelaExterna, PreparedStatement statement, int cont) throws SQLException, IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+        for (Field field : clazz.getDeclaredFields()) {
+            if (value == null) {
+                break;
+            }
+            if (field.isAnnotationPresent(ManyToOne.class) && !isTabelaExterna) {
+                field.setAccessible(true);
+                cont = percorrerObjetoUpdate((T) field.get(value), field.getType(), true, statement, cont);
+                field.setAccessible(false);
                 continue;
             }
-            if(field.isAnnotationPresent(Coluna.class)){
+            if (field.isAnnotationPresent(Coluna.class)) {
                 Coluna coluna = field.getAnnotation(Coluna.class);
-                if(!coluna.inserivel()){
-                    continue;
-                }
-                if(isTabelaExterna){
-                    if(!coluna.chavePrimaria()){
+                if (isTabelaExterna) {
+                    if (!coluna.chavePrimaria() || value == null) {
                         continue;
                     }
-                    if(((ObjetoNegocio) value).getAtributosModificados().contains(coluna.nome())) {
-                        comando.tipoComando(field.get(value), statement, ++cont);
-                    }
+                    field.setAccessible(true);
+                    CreateStatementObjectValue.TypeValue(cast(coluna.typeBD(), field.get(value)), statement, ++cont, connection);
+                    field.setAccessible(false);
                     continue;
                 }
-                if(((ObjetoNegocio) value).getAtributosModificados().contains(coluna.nome())) {
-                    comando.tipoComando(field.get(value), statement, ++cont);
+                if (!coluna.alteravel()) {
+                    continue;
                 }
+                field.setAccessible(true);
+                CreateStatementObjectValue.TypeValue(cast(coluna.typeBD(), field.get(value)), statement, ++cont, connection);
+                field.setAccessible(false);
                 continue;
             }
-            if(((ObjetoNegocio) value).getAtributosModificados().contains(StringOperations.join(field.getName()))) {
-                comando.tipoComando(field.get(value), statement, ++cont);
-            }
         }
+        return cont;
+    }
+
+    private Object cast(Class<?> clazz, Object value) {
+        if (value == null) {
+            return value;
+        }
+        if (clazz.getSimpleName().equalsIgnoreCase("timestamp")) {
+            return (Object) new Timestamp(((Date) value).getTime());
+        }
+        return clazz.cast(value);
     }
 
     private int delete(T value) throws SQLException, IllegalAccessException {
@@ -154,21 +178,33 @@ public class CRUDManager<T> {
         return percorrerObjetoDelete(value, textoSQL).executeUpdate();
     }
 
-    private PreparedStatement percorrerObjetoDelete(T value, StringBuilder textoSQL)throws SQLException, IllegalAccessException{
-        PreparedStatement statement = comando.prepareStatement(textoSQL.toString());
+    private PreparedStatement percorrerObjetoDelete(T value, StringBuilder textoSQL) throws SQLException, IllegalAccessException {
+        PreparedStatement statement = connection.prepareStatement(textoSQL.toString());
         int cont = 0;
-        preencherWhere(value, statement, cont);
+        preencherWhere(value, value.getClass().getDeclaredFields(), statement, false, cont);
         return statement;
     }
 
-    private void preencherWhere(T value, PreparedStatement statement, int cont) throws IllegalAccessException, SQLException {
-        for (Field field : value.getClass().getDeclaredFields()) {
-            Coluna coluna = field.getAnnotation(Coluna.class);
-            if (!coluna.chavePrimaria()) {
+    private int preencherWhere(T value, Field[] fields, PreparedStatement statement, boolean isTabelaExterna, int cont) throws IllegalAccessException, SQLException {
+        for (Field field : fields) {
+            if (field.isAnnotationPresent(ManyToOne.class)) {
+                if (isTabelaExterna) {
+                    continue;
+                }
+                field.setAccessible(true);
+                cont = preencherWhere((T) field.get(value), field.getType().getDeclaredFields(), statement, true, cont);
+                field.setAccessible(false);
                 continue;
             }
-            comando.tipoComando(field.get(value), statement, ++cont);
+            Coluna coluna = field.getAnnotation(Coluna.class);
+            if (coluna == null || !coluna.chavePrimaria()) {
+                continue;
+            }
+            field.setAccessible(true);
+            CreateStatementObjectValue.TypeValue(field.get(value), statement, ++cont, connection);
+            field.setAccessible(false);
         }
+        return cont;
     }
 
     private String tableName(Class<?> clazz) throws SQLException {
@@ -179,36 +215,44 @@ public class CRUDManager<T> {
         return tabela.value();
     }
 
-    private StringBuilder columnsName(Class<?> clazz, boolean insert) {
+    private StringBuilder columnsName(Class<?> clazz, boolean insert) throws SQLException {
         return columnsName(clazz, insert, "");
     }
 
-    private StringBuilder columnsName(Class<?> clazz, boolean insert, String delimitador) {
+    private StringBuilder columnsName(Coluna coluna, boolean insert, String delimitador, StringBuilder columns) throws SQLException {
+        if (coluna == null) {
+            throw new SQLException("Colum can't defined");
+        }
+        if (coluna.chavePrimaria()) {
+            columns.append(delimitador).append(coluna.nome());
+            return columns;
+        }
+        if ((insert && !coluna.inserivel())
+                || (!insert && !coluna.alteravel())) {
+            return columns;
+        }
+        columns.append(delimitador).append(coluna.nome());
+        return columns;
+    }
+
+    private StringBuilder columnsName(Class<?> clazz, boolean insert, String delimitador) throws SQLException {
         StringBuilder columns = new StringBuilder();
         for (Field field : clazz.getDeclaredFields()) {
             if (field.isAnnotationPresent(ManyToOne.class)) {
-                JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
-                columns.append(delimitador).append(Arrays.stream(joinColumn.value()).reduce((a, b) -> a + ", " + b).get());
-                delimitador = ", ";
-                continue;
-            }
-            Coluna coluna = field.getAnnotation(Coluna.class);
-            if (coluna != null) {
-                if (coluna.chavePrimaria()) {
-                    columns.append(delimitador).append(coluna.nome());
+                if (field.isAnnotationPresent(JoinColumn.class)) {
+                    JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
+                    columns.append(delimitador).append(Arrays.stream(joinColumn.value()).reduce((a, b) -> a + ", " + b).get());
                     delimitador = ", ";
                     continue;
                 }
-                if ((insert && !coluna.inserivel())
-                        || (!insert && !coluna.alteravel())) {
-                    continue;
-                }
-                columns.append(delimitador).append(coluna.nome());
-                delimitador = ", ";
+                columns.append(delimitador).append(columnsName(field.getType(), insert, delimitador));
                 continue;
             }
-            columns.append(delimitador).append(StringOperations.join(field.getName()));
+            Coluna coluna = field.getAnnotation(Coluna.class);
+            columns = columnsName(coluna, insert, delimitador, columns);
             delimitador = ", ";
+//            columns.append(delimitador).append(StringOperations.join(field.getName()));
+//            delimitador = ", ";
         }
         return columns;
     }
@@ -218,9 +262,13 @@ public class CRUDManager<T> {
         String delimitador = "";
         for (Field field : clazz.getDeclaredFields()) {
             if (field.isAnnotationPresent(ManyToOne.class)) {
-                JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
-                integorration.append(delimitador).append(Arrays.stream(joinColumn.value()).map(x -> "?").reduce((a,b) -> a + b).get());
-                delimitador = ", ";
+                if (field.isAnnotationPresent(JoinColumn.class)) {
+                    JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
+                    integorration.append(delimitador).append(Arrays.stream(joinColumn.value()).map(x -> "?").reduce((a, b) -> a + b).get());
+                    delimitador = ", ";
+                    continue;
+                }
+                integorration.append(delimitador).append(createInterrogation(field.getType(), insert));
                 continue;
             }
             Coluna coluna = field.getAnnotation(Coluna.class);
@@ -234,37 +282,72 @@ public class CRUDManager<T> {
         return integorration;
     }
 
-    private StringBuilder createWhere(Class<?> clazz) {
+    private StringBuilder createWhere(Class<?> clazz, String delimitador) {
         StringBuilder integorration = new StringBuilder();
-        String delimitador = " WHERE ";
         for (Field field : clazz.getDeclaredFields()) {
+            if (field.isAnnotationPresent(ManyToOne.class)) {
+                if (field.isAnnotationPresent(JoinColumn.class)) {
+                    JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
+                    for (String value : joinColumn.value()) {
+                        integorration.append(delimitador).append(value).append(" = ? ");
+                        delimitador = " AND ";
+                    }
+                    continue;
+                }
+                integorration.append(delimitador).append(createWhere(field.getType(), " AND "));
+                delimitador = " AND ";
+                continue;
+            }
             Coluna coluna = field.getAnnotation(Coluna.class);
             if (!coluna.chavePrimaria()) {
                 continue;
             }
-            integorration.append(delimitador).append(coluna.nome()).append("= ?");
-            delimitador = ", ";
+            integorration.append(delimitador).append(coluna.nome()).append(" = ? ");
+            delimitador = " AND ";
         }
         return integorration;
     }
 
-    private StringBuilder updateColumnsName(T value){
+    private StringBuilder updateColumnsName(T value) throws SQLException, IllegalAccessException, NoSuchMethodException, NoSuchMethodException {
         StringBuilder textoSQL = new StringBuilder();
         String delimitador = "";
-        for(Field field: value.getClass().getDeclaredFields()){
-            Coluna coluna = field.getAnnotation(Coluna.class);
-            if(coluna != null && coluna.alteravel()){
-                if(((ObjetoNegocio) value).getAtributosModificados().contains(coluna.nome())){
-                    textoSQL.append(delimitador).append(coluna.nome()).append(" = ?");
+        for (Field field : value.getClass().getDeclaredFields()) {
+            if (field.isAnnotationPresent(ManyToOne.class)) {
+                field.setAccessible(true);
+
+                int cont = 0;
+                for (Field fieldMany : field.getType().getDeclaredFields()) {
+                    if (!fieldMany.isAnnotationPresent(Coluna.class)) {
+                        continue;
+                    }
+                    Coluna coluna = fieldMany.getAnnotation(Coluna.class);
+                    if (!coluna.alteravel() || !verificarAtributosModificados(field.get(value), coluna.nome())) {
+                        continue;
+                    }
+                    if (field.isAnnotationPresent(JoinColumn.class)) {
+                        JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
+                        textoSQL.append(delimitador).append(joinColumn.value()[cont++]).append(" = ? ");
+                        delimitador = ", ";
+                        ;
+                        continue;
+                    }
+                    textoSQL.append(delimitador).append(coluna.nome()).append(" = ? ");
                     delimitador = ", ";
                 }
+                field.setAccessible(false);
                 continue;
             }
-            String columName = StringOperations.join(field.getName());
-            if(((ObjetoNegocio) value).getAtributosModificados().contains(columName)){
-                textoSQL.append(delimitador).append(columName).append(" = ?");
-                delimitador = ", ";
+            Coluna coluna = field.getAnnotation(Coluna.class);
+            if (coluna != null && coluna.alteravel()) {
+                field.setAccessible(true);
+                if (verificarAtributosModificados(value, coluna.nome())) {
+                    textoSQL = columnsName(coluna, false, delimitador, textoSQL).append(" = ?");
+                    delimitador = ", ";
+                }
+                field.setAccessible(false);
+//                continue;
             }
+
         }
         return textoSQL;
     }

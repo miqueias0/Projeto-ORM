@@ -4,7 +4,6 @@ import br.com.mike.mapper.TesteMapper;
 import br.com.mike.model.Teste;
 
 public class Main {
-
     public static void main(String[] args) throws Exception{
         TesteMapper.mapearObjeto(Teste.class, null);
 //        PreparedStatement preparedStatement = conexao.getComando().createPreparedStatement(montarBaseSqlSelect());
