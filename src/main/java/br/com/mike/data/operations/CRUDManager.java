@@ -1,11 +1,9 @@
 package br.com.mike.data.operations;
 
 import br.com.mike.annotation.Coluna;
+import br.com.mike.annotation.JoinColumn;
 import br.com.mike.annotation.ManyToOne;
 import br.com.mike.annotation.Tabela;
-import br.com.mike.annotation.JoinColumn;
-import br.com.mike.comum.SQLObjectType;
-import br.com.mike.comum.StringOperations;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -15,7 +13,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.List;
 
 public class CRUDManager<T> {
 
@@ -321,14 +318,13 @@ public class CRUDManager<T> {
                         continue;
                     }
                     Coluna coluna = fieldMany.getAnnotation(Coluna.class);
-                    if (!coluna.alteravel() || !verificarAtributosModificados(field.get(value), coluna.nome())) {
+                    if (!coluna.alteravel()) {
                         continue;
                     }
                     if (field.isAnnotationPresent(JoinColumn.class)) {
                         JoinColumn joinColumn = field.getAnnotation(JoinColumn.class);
                         textoSQL.append(delimitador).append(joinColumn.value()[cont++]).append(" = ? ");
                         delimitador = ", ";
-                        ;
                         continue;
                     }
                     textoSQL.append(delimitador).append(coluna.nome()).append(" = ? ");
@@ -340,10 +336,10 @@ public class CRUDManager<T> {
             Coluna coluna = field.getAnnotation(Coluna.class);
             if (coluna != null && coluna.alteravel()) {
                 field.setAccessible(true);
-                if (verificarAtributosModificados(value, coluna.nome())) {
-                    textoSQL = columnsName(coluna, false, delimitador, textoSQL).append(" = ?");
-                    delimitador = ", ";
-                }
+
+                textoSQL = columnsName(coluna, false, delimitador, textoSQL).append(" = ?");
+                delimitador = ", ";
+
                 field.setAccessible(false);
 //                continue;
             }
