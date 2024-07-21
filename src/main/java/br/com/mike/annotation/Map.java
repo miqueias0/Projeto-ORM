@@ -1,11 +1,13 @@
 package br.com.mike.annotation;
 
+
 import java.lang.annotation.*;
 
-@Target({ElementType.FIELD})
+@Target({ElementType.ANNOTATION_TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-public @interface JoinColumn {
-    Map[] value() default {};
+public @interface Map {
+    String key();
 
+    String value();
 }
